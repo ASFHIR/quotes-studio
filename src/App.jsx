@@ -26,13 +26,11 @@ const Icon = ({ name, className }) => {
 };
 
 /**
- * MENGATASI WARNING import.meta
- * Kita menggunakan pengecekan tipe untuk menghindari error pada build target lama (ES2015).
- * Vite akan tetap mengenali ini saat proses build di Netlify.
+ * MENGAMBIL API KEY SECARA AMAN
  */
 const getApiKey = () => {
   try {
-    // Mencoba mengakses variabel lingkungan Vite secara aman
+    // Mengambil dari environment variable (Netlify/Vite)
     return import.meta.env.VITE_GEMINI_API_KEY || "";
   } catch (e) {
     return "";
@@ -190,7 +188,7 @@ export default function App() {
 
   const handleGenerate = async () => {
     if (!apiKey) {
-      setError("API Key tidak ditemukan. Pastikan Anda sudah mengaturnya di Netlify Environment Variables (VITE_GEMINI_API_KEY).");
+      setError("API Key tidak ditemukan. Pastikan Anda sudah mengaturnya di Netlify (VITE_GEMINI_API_KEY).");
       return;
     }
     setIsLoading(true);
@@ -203,17 +201,20 @@ export default function App() {
       const isContinuous = quoteMode === "continuous";
       
       const textPrompt = isContinuous
-        ? `Buatkan 4 kutipan bahasa Indonesia bersambung dengan tema: "${selectedTheme}" untuk "${targetAudience}". ${additionalPrompt} Berikan JSON: {"quotes": [], "imagePrompt": "English prompt for artistic background"}`
-        : `Buatkan kutipan bahasa Indonesia tema: "${selectedTheme}" untuk "${targetAudience}". ${additionalPrompt} Berikan JSON: {"quote": "", "imagePrompt": "English prompt for artistic background"}`;
+        ? `Buatkan 4 kutipan bahasa Indonesia bersambung dengan tema: "${selectedTheme}" untuk "${targetAudience}". Berikan JSON: {"quotes": ["..."], "imagePrompt": "English prompt for background"}`
+        : `Buatkan kutipan bahasa Indonesia tema: "${selectedTheme}" untuk "${targetAudience}". Berikan JSON: {"quote": "...", "imagePrompt": "English prompt for background"}`;
 
       const textPayload = {
         contents: [{ parts: [{ text: textPrompt }] }],
         generationConfig: { responseMimeType: "application/json" }
       };
 
-      // MENGGUNAKAN MODEL STABIL gemini-1.5-flash
+      /**
+       * MENGGUNAKAN MODEL YANG DIDUKUNG DI LINGKUNGAN CANVAS INI
+       * Untuk Netlify, model ini (2.5-flash-preview) adalah yang paling mutakhir.
+       */
       const textRes = await fetchWithRetry(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`,
         { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(textPayload) }
       );
       
@@ -231,9 +232,9 @@ export default function App() {
           instances: { prompt: parsedData.imagePrompt },
           parameters: { sampleCount: 1 }
         };
-        // MENGGUNAKAN MODEL IMAGEN STABIL
+        // Menggunakan Imagen 4.0 sesuai instruksi lingkungan Canvas
         const imgRes = await fetchWithRetry(
-          `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-001:predict?key=${apiKey}`,
+          `https://generativelanguage.googleapis.com/v1beta/models/imagen-4.0-generate-001:predict?key=${apiKey}`,
           { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(imgPayload) }
         );
         setBgImageUrl(`data:image/png;base64,${imgRes.predictions[0].bytesBase64Encoded}`);
@@ -247,7 +248,7 @@ export default function App() {
   };
 
   const drawCanvas = (base64Img, text, ratioStr, theme, fText, fStyle, qStyle, qFont) => {
-    return new Promise((resolve, reject) => {
+    return new Promise((resolve) => {
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d');
       const dims = { "1:1": { w: 1080, h: 1080 }, "3:4": { w: 1080, h: 1440 }, "4:3": { w: 1440, h: 1080 }, "9:16": { w: 1080, h: 1920 }, "16:9": { w: 1920, h: 1080 } }[ratioStr] || { w: 1080, h: 1080 };
@@ -287,14 +288,14 @@ export default function App() {
 
   if (!isLoggedIn) {
     return (
-      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4">
+      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4 text-white">
         <div className="bg-slate-900 p-8 rounded-2xl shadow-2xl w-full max-w-md border border-slate-800">
           <h1 className="text-3xl font-bold text-center text-blue-400 mb-6">Asfhir Quotes Login</h1>
           <form onSubmit={handleLogin} className="space-y-4">
-            <input type="text" placeholder="Username" value={loginUsername} onChange={(e)=>setLoginUsername(e.target.value)} className="w-full p-3 bg-slate-800 rounded-lg text-white border border-slate-700" required />
-            <input type="password" placeholder="Password" value={loginPassword} onChange={(e)=>setLoginPassword(e.target.value)} className="w-full p-3 bg-slate-800 rounded-lg text-white border border-slate-700" required />
+            <input type="text" placeholder="Username" value={loginUsername} onChange={(e)=>setLoginUsername(e.target.value)} className="w-full p-3 bg-slate-800 rounded-lg border border-slate-700" required />
+            <input type="password" placeholder="Password" value={loginPassword} onChange={(e)=>setLoginPassword(e.target.value)} className="w-full p-3 bg-slate-800 rounded-lg border border-slate-700" required />
             {loginError && <p className="text-red-500 text-sm text-center">{loginError}</p>}
-            <button type="submit" className="w-full bg-blue-600 p-3 rounded-lg font-bold hover:bg-blue-500 transition-colors text-white">
+            <button type="submit" className="w-full bg-blue-600 p-3 rounded-lg font-bold hover:bg-blue-500 transition-colors">
               {isLoggingIn ? "Memeriksa..." : "MASUK"}
             </button>
           </form>
@@ -307,7 +308,7 @@ export default function App() {
     <div className="min-h-screen bg-slate-950 text-white p-4 md:p-8">
       <header className="max-w-4xl mx-auto text-center mb-10">
         <h1 className="text-4xl font-extrabold text-blue-400 mb-2">Asfhir Quotes Studio</h1>
-        <p className="text-slate-400">Generator Kutipan AI - Versi Stabil</p>
+        <p className="text-slate-400 italic">"Sentuhan Kata dalam Sekejap Mata"</p>
       </header>
 
       <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -339,7 +340,7 @@ export default function App() {
             <input type="text" placeholder="Contoh: @asfhir_studio" value={footerText} onChange={(e)=>setFooterText(e.target.value)} className="w-full p-3 bg-slate-800 rounded-lg border border-slate-700" />
           </div>
 
-          <button onClick={handleGenerate} disabled={isLoading} className="w-full bg-blue-600 p-4 rounded-xl font-bold hover:bg-blue-500 disabled:opacity-50 transition-all flex items-center justify-center gap-2">
+          <button onClick={handleGenerate} disabled={isLoading} className="w-full bg-blue-600 p-4 rounded-xl font-bold hover:bg-blue-500 disabled:opacity-50 transition-all flex items-center justify-center gap-2 shadow-lg shadow-blue-900/20">
             {isLoading ? (
               <>
                 <Icon name="RefreshCw" className="w-5 h-5 animate-spin" />
@@ -347,7 +348,7 @@ export default function App() {
               </>
             ) : (
               <>
-                <Icon name="Sparkles" className="w-5 h-5" />
+                <Icon name="Sparkles" className="w-5 h-5 text-yellow-300" />
                 GENERATE SEKARANG
               </>
             )}
@@ -378,10 +379,10 @@ export default function App() {
               <div className="flex gap-3">
                 <button 
                   onClick={handleDownload} 
-                  className="flex-1 bg-green-600 hover:bg-green-500 p-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-colors"
+                  className="flex-1 bg-green-600 hover:bg-green-500 p-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-colors shadow-lg shadow-green-900/20"
                 >
                   <Icon name="Download" className="w-5 h-5" />
-                  UNDUH SEMUA
+                  UNDUH HASIL
                 </button>
                 <button 
                   onClick={() => {setCompositeImageUrl(""); setCompositeImageUrls([])}} 
@@ -393,18 +394,18 @@ export default function App() {
               
               {quoteMode === "continuous" && (
                 <p className="text-center text-xs text-slate-500 italic">
-                  *4 slide telah dibuat dan siap diunduh secara bersamaan.
+                  *4 slide telah dibuat dan siap diunduh.
                 </p>
               )}
             </div>
           ) : (
             <div className="text-center space-y-4">
-              <div className="w-20 h-20 bg-slate-800 rounded-full flex items-center justify-center mx-auto">
+              <div className="w-20 h-20 bg-slate-800 rounded-full flex items-center justify-center mx-auto border border-slate-700">
                 <Icon name="ImageIcon" className="w-10 h-10 text-slate-600" />
               </div>
               <div className="space-y-1">
-                <p className="text-slate-400 font-medium">Belum ada kutipan</p>
-                <p className="text-slate-600 text-sm">Klik tombol "Generate" untuk mulai berkarya.</p>
+                <p className="text-slate-400 font-medium">Belum ada karya</p>
+                <p className="text-slate-600 text-sm">Tekan tombol "Generate" untuk melihat keajaiban.</p>
               </div>
             </div>
           )}
@@ -412,7 +413,7 @@ export default function App() {
       </div>
 
       <footer className="max-w-4xl mx-auto text-center mt-16 pb-8 border-t border-slate-900 pt-8">
-        <p className="text-slate-600 text-sm">© 2024 Asfhir Quotes Studio. Didukung oleh Gemini AI.</p>
+        <p className="text-slate-600 text-sm italic">© 2024 Asfhir Quotes Studio. Seluruh hak cipta dilindungi.</p>
       </footer>
     </div>
   );
